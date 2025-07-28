@@ -92,24 +92,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.commandName === "deletemyboostrole") {
     const member = await guild.members.fetch(userId);
 
-    const role = guild.roles.cache.find(r =>
-      member.roles.cache.has(r.id) &&
-      r.name.toLowerCase().includes(interaction.user.username.toLowerCase())
-    );
+    // Find claimed entry with roleId
+    const claimEntry = claimed.find(entry => entry.userId === userId);
+    if (!claimEntry) {
+      return interaction.reply({ content: "❌ No custom boost role found for you.", flags: 64 });
+    }
 
-    if (!role) {
-      return interaction.reply({ content: "❌ No custom boost role found.", flags: 64 });
+    // Get the role by ID
+    const role = guild.roles.cache.get(claimEntry.roleId);
+
+    if (!role || !member.roles.cache.has(role.id)) {
+      return interaction.reply({ content: "❌ Your custom boost role was not found or you don't have it.", flags: 64 });
     }
 
     try {
       await member.roles.remove(role);
       await role.delete(`Boost role deleted by ${interaction.user.tag}`);
 
-      claimed = claimed.filter(entry =>
-        (typeof entry === "string" && entry !== userId) ||
-        (typeof entry === "object" && entry.userId !== userId)
-      );
-
+      // Remove claim entry
+      claimed = claimed.filter(entry => entry.userId !== userId);
       fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
 
       await interaction.reply({
@@ -255,9 +256,9 @@ client.on("messageCreate", async (message) => {
     await thread.send(`✅ Role **${roleName}** created and assigned! ${emojiDisplay}`);
     await thread.setArchived(true);
 
-    claimed = claimed.filter(entry =>
-      entry !== userId && (entry.userId !== userId)
-    );
+    // Update claimed with roleId for accurate deletion later
+    claimed = claimed.filter(entry => entry.userId !== userId);
+    claimed.push({ userId, roleId: role.id });
     fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
   } catch (err) {
     console.error("Thread role creation error:", err);
