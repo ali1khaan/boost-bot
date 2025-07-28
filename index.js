@@ -249,7 +249,7 @@ client.on("messageCreate", async (message) => {
     // Preview embed
     const previewEmbed = {
       title: "🎨 Role Preview",
-      color: parseInt(roleColor.replace("#", ""), 16),
+      color: roleColor === "Default" ? 0x2f3136 : parseInt(roleColor.replace("#", ""), 16), // default dark grey if invalid
       fields: [
         { name: "Name", value: roleName, inline: true },
         { name: "Color", value: roleColor, inline: true },
@@ -267,14 +267,17 @@ client.on("messageCreate", async (message) => {
     await confirmMsg.react("❌");
 
     const collected = await confirmMsg.awaitReactions({
-      filter: (r, u) => ["✅", "❌"].includes(r.emoji.name) && u.id === userId,
+      filter: (reaction, user) => ["✅", "❌"].includes(reaction.emoji.name) && user.id === userId,
       max: 1,
       time: 30_000,
       errors: ["time"],
     });
 
     const choice = collected.first().emoji.name;
-    if (choice === "❌") return thread.send("❌ Role creation cancelled.");
+    if (choice === "❌") {
+      await thread.send("❌ Role creation cancelled.");
+      return;
+    }
 
     let role = guild.roles.cache.find(r => r.name === roleName);
     if (!role) role = await guild.roles.create(roleOptions);
