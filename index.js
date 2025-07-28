@@ -1,4 +1,7 @@
-require("dotenv").config();
+require("dotenv").config(); // MUST BE FIRST to load env variables
+
+console.log("Token loaded:", process.env.TOKEN ? "[OK]" : "[MISSING]");
+
 const fs = require("fs");
 const {
   Client,
@@ -55,7 +58,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     await thread.members.add(userId);
 
-    // Ensure they can send messages inside the thread
+    // Give explicit permissions so they can send messages
     await thread.permissionOverwrites.edit(userId, {
       SendMessages: true,
       ViewChannel: true,
@@ -93,6 +96,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       claimed = claimed.filter(entry => {
         if (typeof entry === "string") return entry !== userId;
         if (typeof entry === "object") return entry.userId !== userId;
+        return true; // default keep
       });
 
       fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
@@ -194,7 +198,7 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
         ViewChannel: true,
       });
 
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1000)); // small wait
 
       await thread.send(
         `Hey <@${userId}>! Thanks for boosting the server! 🎉\n` +
