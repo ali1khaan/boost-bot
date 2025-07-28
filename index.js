@@ -88,43 +88,49 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await interaction.reply({ content: "✅ Simulated boost thread created!", flags: 64 });
   }
 
-  // 🗑 Delete custom boost role
   if (interaction.commandName === "deletemyboostrole") {
-    const member = await guild.members.fetch(userId);
+  const member = await guild.members.fetch(userId);
+  const roleName = interaction.options.getString("rolename");
 
-    // Find claimed entry with roleId
-    const claimEntry = claimed.find(entry => entry.userId === userId);
-    if (!claimEntry) {
-      return interaction.reply({ content: "❌ No custom boost role found for you.", flags: 64 });
-    }
+  // Find role by name (case-insensitive)
+  const role = guild.roles.cache.find(r => r.name.toLowerCase() === roleName.toLowerCase());
 
-    // Get the role by ID
-    const role = guild.roles.cache.get(claimEntry.roleId);
-
-    if (!role || !member.roles.cache.has(role.id)) {
-      return interaction.reply({ content: "❌ Your custom boost role was not found or you don't have it.", flags: 64 });
-    }
-
-    try {
-      await member.roles.remove(role);
-      await role.delete(`Boost role deleted by ${interaction.user.tag}`);
-
-      // Remove claim entry
-      claimed = claimed.filter(entry => entry.userId !== userId);
-      fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
-
-      await interaction.reply({
-        content: "✅ Boost role deleted. You may now create a new one via /simulateboost.",
-        flags: 64,
-      });
-    } catch (err) {
-      console.error("❌ Error deleting boost role:", err);
-      await interaction.reply({
-        content: "❌ Something went wrong while deleting your role.",
-        flags: 64,
-      });
-    }
+  if (!role) {
+    return interaction.reply({ content: `❌ Role named **${roleName}** not found in this server.`, flags: 64 });
   }
+
+  // Check if member actually has that role
+  if (!member.roles.cache.has(role.id)) {
+    return interaction.reply({ content: `❌ You don't have the role **${roleName}**.`, flags: 64 });
+  }
+
+  // Optional: check if role was created by this user via claimedBoosts
+  const claimEntry = claimed.find(entry => entry.userId === userId && entry.roleId === role.id);
+  if (!claimEntry) {
+    return interaction.reply({ content: `❌ The role **${roleName}** isn't registered as your custom boost role.`, flags: 64 });
+  }
+
+  try {
+    await member.roles.remove(role);
+    await role.delete(`Boost role deleted by ${interaction.user.tag}`);
+
+    // Remove from claimed array
+    claimed = claimed.filter(entry => !(entry.userId === userId && entry.roleId === role.id));
+    fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
+
+    await interaction.reply({
+      content: `✅ Successfully deleted your boost role **${roleName}**.`,
+      flags: 64,
+    });
+  } catch (err) {
+    console.error("❌ Error deleting boost role:", err);
+    await interaction.reply({
+      content: "❌ Something went wrong while deleting your role.",
+      flags: 64,
+    });
+  }
+}
+
 
   // 🎁 Claim boost role
   if (interaction.commandName === "claimboostrole") {

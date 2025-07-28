@@ -8,7 +8,13 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("deletemyboostrole")
-    .setDescription("Delete your current boost role and allow re-submission"),
+    .setDescription("Delete one of your custom boost roles")
+    .addStringOption(option =>
+      option
+        .setName("rolename")
+        .setDescription("Name of the boost role you want to delete")
+        .setRequired(true)
+    ),
 
   new SlashCommandBuilder()
     .setName("claimboostrole")
