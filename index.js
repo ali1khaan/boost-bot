@@ -198,7 +198,7 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
   }
 });
 
-// 🧠 Thread reply logic w/ confirmation & embed
+// 🧠 Thread reply logic without confirmation, immediate role creation & assignment
 client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
@@ -221,7 +221,7 @@ client.on("messageCreate", async (message) => {
 
     const roleOptions = {
       name: roleName,
-      color: roleColor,
+      color: roleColor === "Default" ? undefined : roleColor,
       hoist: false,
       position: guild.members.me.roles.highest.position - 1,
       reason: `Boost role for ${message.author.tag}`,
@@ -246,39 +246,6 @@ client.on("messageCreate", async (message) => {
       }
     }
 
-    // Preview embed
-    const previewEmbed = {
-      title: "🎨 Role Preview",
-      color: roleColor === "Default" ? 0x2f3136 : parseInt(roleColor.replace("#", ""), 16), // default dark grey if invalid
-      fields: [
-        { name: "Name", value: roleName, inline: true },
-        { name: "Color", value: roleColor, inline: true },
-        { name: "Emoji", value: emojiDisplay, inline: true },
-      ],
-      footer: { text: "React with ✅ to confirm or ❌ to cancel" },
-    };
-
-    const confirmMsg = await thread.send({
-      content: `<@${userId}> Confirm this role:`,
-      embeds: [previewEmbed],
-    });
-
-    await confirmMsg.react("✅");
-    await confirmMsg.react("❌");
-
-    const collected = await confirmMsg.awaitReactions({
-      filter: (reaction, user) => ["✅", "❌"].includes(reaction.emoji.name) && user.id === userId,
-      max: 1,
-      time: 30_000,
-      errors: ["time"],
-    });
-
-    const choice = collected.first().emoji.name;
-    if (choice === "❌") {
-      await thread.send("❌ Role creation cancelled.");
-      return;
-    }
-
     let role = guild.roles.cache.find(r => r.name === roleName);
     if (!role) role = await guild.roles.create(roleOptions);
 
@@ -294,9 +261,6 @@ client.on("messageCreate", async (message) => {
     fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
   } catch (err) {
     console.error("Thread role creation error:", err);
-    if (err.code === "TIME") {
-      message.channel.send("❌ Timed out. Please resend your role info.");
-    }
   }
 });
 
