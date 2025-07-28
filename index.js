@@ -56,7 +56,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     entry === userId || (entry.userId && entry.userId === userId)
   );
 
-  // 🧪 Simulated boost
   if (interaction.commandName === "simulateboost") {
     if (alreadyClaimed) {
       return interaction.reply({ content: "❌ You've already claimed your boost reward.", flags: 64 });
@@ -89,50 +88,39 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.commandName === "deletemyboostrole") {
-  const member = await guild.members.fetch(userId);
-  const roleName = interaction.options.getString("rolename");
+    const roleName = interaction.options.getString("rolename");
+    if (!roleName) {
+      return interaction.reply({ content: "❌ You must provide a role name.", flags: 64 });
+    }
 
-  // Find role by name (case-insensitive)
-  const role = guild.roles.cache.find(r => r.name.toLowerCase() === roleName.toLowerCase());
+    const member = await guild.members.fetch(userId);
+    const role = guild.roles.cache.find(r => r.name?.toLowerCase() === roleName.toLowerCase());
 
-  if (!role) {
-    return interaction.reply({ content: `❌ Role named **${roleName}** not found in this server.`, flags: 64 });
+    if (!role) {
+      return interaction.reply({ content: `❌ Role named **${roleName}** not found in this server.`, flags: 64 });
+    }
+
+    if (!member.roles.cache.has(role.id)) {
+      return interaction.reply({ content: `❌ You don't have the role **${roleName}**.`, flags: 64 });
+    }
+
+    const claimEntry = claimed.find(entry => entry.userId === userId && entry.roleId === role.id);
+    if (!claimEntry) {
+      return interaction.reply({ content: `❌ That role isn't registered as your boost role.`, flags: 64 });
+    }
+
+    try {
+      await member.roles.remove(role);
+      await role.delete(`Boost role deleted by ${interaction.user.tag}`);
+      claimed = claimed.filter(entry => !(entry.userId === userId && entry.roleId === role.id));
+      fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
+      await interaction.reply({ content: `✅ Successfully deleted **${roleName}**.`, flags: 64 });
+    } catch (err) {
+      console.error("❌ Error deleting boost role:", err);
+      await interaction.reply({ content: "❌ Something went wrong while deleting your role.", flags: 64 });
+    }
   }
 
-  // Check if member actually has that role
-  if (!member.roles.cache.has(role.id)) {
-    return interaction.reply({ content: `❌ You don't have the role **${roleName}**.`, flags: 64 });
-  }
-
-  // Optional: check if role was created by this user via claimedBoosts
-  const claimEntry = claimed.find(entry => entry.userId === userId && entry.roleId === role.id);
-  if (!claimEntry) {
-    return interaction.reply({ content: `❌ The role **${roleName}** isn't registered as your custom boost role.`, flags: 64 });
-  }
-
-  try {
-    await member.roles.remove(role);
-    await role.delete(`Boost role deleted by ${interaction.user.tag}`);
-
-    // Remove from claimed array
-    claimed = claimed.filter(entry => !(entry.userId === userId && entry.roleId === role.id));
-    fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
-
-    await interaction.reply({
-      content: `✅ Successfully deleted your boost role **${roleName}**.`,
-      flags: 64,
-    });
-  } catch (err) {
-    console.error("❌ Error deleting boost role:", err);
-    await interaction.reply({
-      content: "❌ Something went wrong while deleting your role.",
-      flags: 64,
-    });
-  }
-}
-
-
-  // 🎁 Claim boost role
   if (interaction.commandName === "claimboostrole") {
     if (alreadyClaimed) {
       return interaction.reply({ content: "❌ You've already claimed your boost role.", flags: 64 });
@@ -205,7 +193,7 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
   }
 });
 
-// 🧠 Thread reply logic without confirmation, immediate role creation & assignment
+// 🧠 Thread reply logic
 client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
@@ -262,7 +250,6 @@ client.on("messageCreate", async (message) => {
     await thread.send(`✅ Role **${roleName}** created and assigned! ${emojiDisplay}`);
     await thread.setArchived(true);
 
-    // Update claimed with roleId for accurate deletion later
     claimed = claimed.filter(entry => entry.userId !== userId);
     claimed.push({ userId, roleId: role.id });
     fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
