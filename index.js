@@ -1,4 +1,4 @@
-require("dotenv").config(); // MUST BE FIRST to load env variables
+require("dotenv").config(); // MUST BE FIRST to load env vars
 
 console.log("Token loaded:", process.env.TOKEN ? "[OK]" : "[MISSING]");
 
@@ -20,33 +20,50 @@ const client = new Client({
 });
 
 const CLAIMED_FILE = "./claimedBoosts.json";
-let claimed = [];
-
-if (fs.existsSync(CLAIMED_FILE)) {
-  claimed = JSON.parse(fs.readFileSync(CLAIMED_FILE, "utf8"));
-}
+let claimed = fs.existsSync(CLAIMED_FILE)
+  ? JSON.parse(fs.readFileSync(CLAIMED_FILE, "utf8"))
+  : [];
 
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-// Slash commands handler
+// 🔧 Utility
+function isValidHex(color) {
+  return /^#([0-9A-F]{3}){1,2}$/i.test(color);
+}
+
+function autoDeleteThread(thread) {
+  setTimeout(async () => {
+    try {
+      const fetched = await thread.fetch();
+      if (!fetched.archived) await thread.setArchived(true, "Auto-archive after 24h");
+      await thread.delete("Auto-delete after 24h");
+    } catch (err) {
+      console.error("Thread auto-delete failed:", err);
+    }
+  }, 1000 * 60 * 60 * 24); // 24 hours
+}
+
+// 🔁 Slash Commands
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   const userId = interaction.user.id;
   const guild = interaction.guild;
 
-  // SIMULATE BOOST
+  const alreadyClaimed = claimed.some(entry =>
+    entry === userId || (entry.userId && entry.userId === userId)
+  );
+
+  // 🧪 Simulated boost
   if (interaction.commandName === "simulateboost") {
-    if (claimed.some(entry => entry === userId || (entry.userId === userId))) {
+    if (alreadyClaimed) {
       return interaction.reply({ content: "❌ You've already claimed your boost reward.", ephemeral: true });
     }
 
     const boostChannel = await guild.channels.fetch(process.env.BOOST_CHANNEL_ID);
-    if (!boostChannel) {
-      return interaction.reply({ content: "❌ Boost channel not found.", ephemeral: true });
-    }
+    if (!boostChannel) return interaction.reply({ content: "❌ Boost channel not found.", ephemeral: true });
 
     const thread = await boostChannel.threads.create({
       name: `Boost Thread - ${interaction.user.username}`,
@@ -57,26 +74,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
     });
 
     await thread.members.add(userId);
-
-    // Give explicit permissions so they can send messages
     await thread.permissionOverwrites.edit(userId, {
       SendMessages: true,
       ViewChannel: true,
     });
 
-    await thread.send(
-      `Hey <@${userId}>! Thanks for boosting the server! 🎉\n` +
-      `Reply in this thread with your **desired role name**, **color** (hex code), and **emoji**.\n` +
-      `Example: \`Boost Daddy #ff33aa <:nerdkawa:1399082077298884702>\``
-    );
+    await thread.send(`Hey <@${userId}>! Thanks for boosting the server! 🎉\nReply with your **role name**, **hex color**, and **emoji**.\nExample: \`Boost Daddy #ff33aa 🔥\``);
 
+    autoDeleteThread(thread);
     claimed.push(userId);
     fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
 
     await interaction.reply({ content: "✅ Simulated boost thread created!", ephemeral: true });
   }
 
-  // DELETE BOOST ROLE
+  // 🗑 Delete custom boost role
   if (interaction.commandName === "deletemyboostrole") {
     const member = await guild.members.fetch(userId);
 
@@ -86,23 +98,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
     );
 
     if (!role) {
-      return interaction.reply({ content: "❌ You don't have a custom boost role assigned.", ephemeral: true });
+      return interaction.reply({ content: "❌ No custom boost role found.", ephemeral: true });
     }
 
     try {
       await member.roles.remove(role);
-      await role.delete(`User ${interaction.user.tag} deleted their boost role.`);
+      await role.delete(`Boost role deleted by ${interaction.user.tag}`);
 
-      claimed = claimed.filter(entry => {
-        if (typeof entry === "string") return entry !== userId;
-        if (typeof entry === "object") return entry.userId !== userId;
-        return true; // default keep
-      });
+      claimed = claimed.filter(entry =>
+        (typeof entry === "string" && entry !== userId) ||
+        (typeof entry === "object" && entry.userId !== userId)
+      );
 
       fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
 
       await interaction.reply({
-        content: "✅ Your boost role has been deleted. You can now create a new one by boosting or using /simulateboost.",
+        content: "✅ Boost role deleted. You may now create a new one via /simulateboost.",
         ephemeral: true,
       });
     } catch (err) {
@@ -114,65 +125,45 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   }
 
-  // CLAIM BOOST ROLE
+  // 🎁 Claim boost role
   if (interaction.commandName === "claimboostrole") {
-    if (claimed.some(entry => entry.userId === userId || entry === userId)) {
-      return interaction.reply({
-        content: "❌ You've already claimed your boost role.",
-        ephemeral: true,
-      });
+    if (alreadyClaimed) {
+      return interaction.reply({ content: "❌ You've already claimed your boost role.", ephemeral: true });
     }
 
     const member = await guild.members.fetch(userId);
     if (!member.premiumSince) {
-      return interaction.reply({
-        content: "❌ You are not currently boosting the server.",
-        ephemeral: true,
-      });
+      return interaction.reply({ content: "❌ You're not boosting this server.", ephemeral: true });
     }
 
     const boostChannel = await guild.channels.fetch(process.env.BOOST_CHANNEL_ID);
-    if (!boostChannel) {
-      return interaction.reply({ content: "❌ Boost channel not found.", ephemeral: true });
-    }
+    if (!boostChannel) return interaction.reply({ content: "❌ Boost channel not found.", ephemeral: true });
 
     const thread = await boostChannel.threads.create({
       name: `Boost Thread - ${interaction.user.username}`,
       autoArchiveDuration: 60,
       type: ChannelType.PrivateThread,
       invitable: false,
-      reason: `Manual claim boost thread for ${interaction.user.tag}`,
+      reason: `Boost thread for ${interaction.user.tag}`,
     });
 
     await thread.members.add(userId);
-
-    // Permissions so they can talk
     await thread.permissionOverwrites.edit(userId, {
       SendMessages: true,
       ViewChannel: true,
     });
 
-    await thread.send(
-      `Hey <@${userId}>! Thanks for boosting the server! 🎉\n` +
-      `Reply in this thread with your **desired role name**, **color** (hex code), and **emoji**.\n` +
-      `Example: \`Boost Daddy #ff33aa <:nerdkawa:1399082077298884702>\``
-    );
+    await thread.send(`Hey <@${userId}>! Thanks for boosting the server! 🎉\nReply with your **role name**, **hex color**, and **emoji**.\nExample: \`Boost Daddy #ff33aa 🔥\``);
 
-    if (Array.isArray(claimed[0])) {
-      claimed.push([userId]); // legacy support
-    } else {
-      claimed.push({ userId });
-    }
+    autoDeleteThread(thread);
+    claimed.push({ userId });
     fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
 
-    await interaction.reply({
-      content: "✅ Your boost thread has been created! Check it to submit your role.",
-      ephemeral: true,
-    });
+    await interaction.reply({ content: "✅ Boost thread created! Check it to claim your role.", ephemeral: true });
   }
 });
 
-// Detect real boosts
+// 🎯 Real boost detection
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
   try {
     if (!oldMember.premiumSince && newMember.premiumSince) {
@@ -187,25 +178,18 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
         autoArchiveDuration: 60,
         type: ChannelType.PrivateThread,
         invitable: false,
-        reason: `Boost thread for ${newMember.user.tag}`,
+        reason: `Real boost thread for ${newMember.user.tag}`,
       });
 
       await thread.members.add(userId);
-
-      // Permissions so they can talk
       await thread.permissionOverwrites.edit(userId, {
         SendMessages: true,
         ViewChannel: true,
       });
 
-      await new Promise((r) => setTimeout(r, 1000)); // small wait
+      await thread.send(`Hey <@${userId}>! Thanks for boosting the server! 🎉\nReply with your **role name**, **hex color**, and **emoji**.\nExample: \`Boost Daddy #ff33aa 🔥\``);
 
-      await thread.send(
-        `Hey <@${userId}>! Thanks for boosting the server! 🎉\n` +
-        `Reply in this thread with your **desired role name**, **color** (hex code), and **emoji**.\n` +
-        `Example: \`Boost Daddy #ff33aa 🔥\``
-      );
-
+      autoDeleteThread(thread);
       claimed.push(userId);
       fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
     }
@@ -214,11 +198,7 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
   }
 });
 
-function isValidHex(color) {
-  return /^#([0-9A-F]{3}){1,2}$/i.test(color);
-}
-
-// Handle thread messages for role creation
+// 🧠 Thread reply logic w/ confirmation & embed
 client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
@@ -231,13 +211,12 @@ client.on("messageCreate", async (message) => {
 
     const parts = message.content.trim().split(" ");
     if (parts.length < 3) {
-      return thread.send(`<@${userId}> Please send role name, hex color, and emoji like this:\n\`Cool Cat #ff8800 <:nerdkawa:1399082077298884702>\``);
+      return thread.send(`<@${userId}> Send role name, color, and emoji like:\n\`Cool Cat #ff8800 🔥\``);
     }
 
     const emojiInput = parts.pop();
     const colorInput = parts.pop();
     const roleName = parts.join(" ");
-
     const roleColor = isValidHex(colorInput) ? colorInput : "Default";
 
     const roleOptions = {
@@ -245,13 +224,11 @@ client.on("messageCreate", async (message) => {
       color: roleColor,
       hoist: false,
       position: guild.members.me.roles.highest.position - 1,
-      reason: `Custom boost role for ${message.author.tag}`,
+      reason: `Boost role for ${message.author.tag}`,
     };
 
-    // Handle emoji
     let emojiDisplay = emojiInput;
     const guildEmoji = guild.emojis.cache.find(e => e.name === emojiInput);
-
     if (guildEmoji) {
       const format = guildEmoji.animated ? "gif" : "png";
       roleOptions.icon = `https://cdn.discordapp.com/emojis/${guildEmoji.id}.${format}`;
@@ -269,21 +246,54 @@ client.on("messageCreate", async (message) => {
       }
     }
 
+    // Preview embed
+    const previewEmbed = {
+      title: "🎨 Role Preview",
+      color: parseInt(roleColor.replace("#", ""), 16),
+      fields: [
+        { name: "Name", value: roleName, inline: true },
+        { name: "Color", value: roleColor, inline: true },
+        { name: "Emoji", value: emojiDisplay, inline: true },
+      ],
+      footer: { text: "React with ✅ to confirm or ❌ to cancel" },
+    };
+
+    const confirmMsg = await thread.send({
+      content: `<@${userId}> Confirm this role:`,
+      embeds: [previewEmbed],
+    });
+
+    await confirmMsg.react("✅");
+    await confirmMsg.react("❌");
+
+    const collected = await confirmMsg.awaitReactions({
+      filter: (r, u) => ["✅", "❌"].includes(r.emoji.name) && u.id === userId,
+      max: 1,
+      time: 30_000,
+      errors: ["time"],
+    });
+
+    const choice = collected.first().emoji.name;
+    if (choice === "❌") return thread.send("❌ Role creation cancelled.");
+
     let role = guild.roles.cache.find(r => r.name === roleName);
-    if (!role) {
-      role = await guild.roles.create(roleOptions);
-    }
+    if (!role) role = await guild.roles.create(roleOptions);
 
     const member = await guild.members.fetch(userId);
     await member.roles.add(role);
 
-    await thread.send(`✅ <@${userId}> Role **${roleName}** created and assigned! ${emojiDisplay}`);
+    await thread.send(`✅ Role **${roleName}** created and assigned! ${emojiDisplay}`);
     await thread.setArchived(true);
 
-    claimed = claimed.filter(id => id !== userId && id.userId !== userId);
+    claimed = claimed.filter(entry =>
+      entry !== userId && (entry.userId !== userId)
+    );
     fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
   } catch (err) {
-    console.error("Error handling thread reply:", err);
+    console.error("Thread role creation error:", err);
+    if (err.code === "TIME") {
+      message.channel.send("❌ Timed out. Please resend your role info.");
+    }
   }
 });
 
