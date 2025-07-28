@@ -59,11 +59,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   // 🧪 Simulated boost
   if (interaction.commandName === "simulateboost") {
     if (alreadyClaimed) {
-      return interaction.reply({ content: "❌ You've already claimed your boost reward.", ephemeral: true });
+      return interaction.reply({ content: "❌ You've already claimed your boost reward.", flags: 64 });
     }
 
     const boostChannel = await guild.channels.fetch(process.env.BOOST_CHANNEL_ID);
-    if (!boostChannel) return interaction.reply({ content: "❌ Boost channel not found.", ephemeral: true });
+    if (!boostChannel) return interaction.reply({ content: "❌ Boost channel not found.", flags: 64 });
 
     const thread = await boostChannel.threads.create({
       name: `Boost Thread - ${interaction.user.username}`,
@@ -85,7 +85,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     claimed.push(userId);
     fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
 
-    await interaction.reply({ content: "✅ Simulated boost thread created!", ephemeral: true });
+    await interaction.reply({ content: "✅ Simulated boost thread created!", flags: 64 });
   }
 
   // 🗑 Delete custom boost role
@@ -98,7 +98,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     );
 
     if (!role) {
-      return interaction.reply({ content: "❌ No custom boost role found.", ephemeral: true });
+      return interaction.reply({ content: "❌ No custom boost role found.", flags: 64 });
     }
 
     try {
@@ -114,13 +114,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.reply({
         content: "✅ Boost role deleted. You may now create a new one via /simulateboost.",
-        ephemeral: true,
+        flags: 64,
       });
     } catch (err) {
       console.error("❌ Error deleting boost role:", err);
       await interaction.reply({
         content: "❌ Something went wrong while deleting your role.",
-        ephemeral: true,
+        flags: 64,
       });
     }
   }
@@ -128,16 +128,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
   // 🎁 Claim boost role
   if (interaction.commandName === "claimboostrole") {
     if (alreadyClaimed) {
-      return interaction.reply({ content: "❌ You've already claimed your boost role.", ephemeral: true });
+      return interaction.reply({ content: "❌ You've already claimed your boost role.", flags: 64 });
     }
 
     const member = await guild.members.fetch(userId);
     if (!member.premiumSince) {
-      return interaction.reply({ content: "❌ You're not boosting this server.", ephemeral: true });
+      return interaction.reply({ content: "❌ You're not boosting this server.", flags: 64 });
     }
 
     const boostChannel = await guild.channels.fetch(process.env.BOOST_CHANNEL_ID);
-    if (!boostChannel) return interaction.reply({ content: "❌ Boost channel not found.", ephemeral: true });
+    if (!boostChannel) return interaction.reply({ content: "❌ Boost channel not found.", flags: 64 });
 
     const thread = await boostChannel.threads.create({
       name: `Boost Thread - ${interaction.user.username}`,
@@ -159,7 +159,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     claimed.push({ userId });
     fs.writeFileSync(CLAIMED_FILE, JSON.stringify(claimed, null, 2));
 
-    await interaction.reply({ content: "✅ Boost thread created! Check it to claim your role.", ephemeral: true });
+    await interaction.reply({ content: "✅ Boost thread created! Check it to claim your role.", flags: 64 });
   }
 });
 
