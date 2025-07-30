@@ -55,6 +55,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
   const alreadyClaimed = claimed.some(entry =>
     entry === userId || (entry.userId && entry.userId === userId)
   );
+  
+if (interaction.commandName === "say") {
+  const ownerId = "975554681126412338";
+  if (interaction.user.id !== ownerId) {
+    return interaction.reply({
+      content: "❌ You ain't the boss. Access denied.",
+      ephemeral: true,
+    });
+  }
+
+  const message = interaction.options.getString("message");
+
+  await interaction.reply({ content: "✅ Message sent as bot.", ephemeral: true });
+  await interaction.channel.send(message);
+}
 
   if (interaction.commandName === "simulateboost") {
     if (alreadyClaimed) {
